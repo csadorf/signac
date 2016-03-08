@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 #: The default filename to read from and write statepoints to.
 FN_STATEPOINTS = 'signac_statepoints.json'
 
+def _match(doc, f):
+    for key, value in f.items():
+        if key not in doc or doc[key] != value:
+            return False
+    return True
 
 class Project(object):
     """The handle on a signac project.
@@ -120,14 +125,22 @@ class Project(object):
     def num_jobs(self):
         return len(list(self._job_dirs()))
 
-    def find_jobs(self, filter=None):
+    def find_jobs(filter=None, doc_filter=None):
         """Find all jobs in the project's workspace.
 
         :param filter: If not None, only find jobs matching the filter.
+        :param doc_filter: If not None,
+            only find job documents matching doc_filter.
         :type filter: mapping
+        :type doc_filter: mapping
         :yields: Instances of :class:`~signac.contrib.job.Job`"""
+        doc_filter = None if doc_filter is None else json.loads(json.dumps(doc_filter))
         for statepoint in self.find_statepoints(filter):
-            yield Job(self, statepoint)
+            j = Job(self, statepoint)
+            if doc_filter is None:
+                yield j
+            elif _match(dict(j.document), doc_filter):
+                yield j
 
     def find_statepoints(self, filter=None, skip_errors=False):
         """Find all statepoints in the project's workspace.
@@ -140,11 +153,6 @@ class Project(object):
         :yields: statepoints as dict"""
         filter = None if filter is None else json.loads(json.dumps(filter))
 
-        def _match(doc, f):
-            for key, value in f.items():
-                if key not in doc or doc[key] != value:
-                    return False
-            return True
         wd = self.workspace()
         for job_dir in self._job_dirs():
             fn_manifest = os.path.join(wd, job_dir, Job.FN_MANIFEST)
@@ -321,7 +329,7 @@ class Project(object):
                 "Creating link {src} -> {dst}".format(src=src, dst=dst))
             _make_link(src, dst)
 
-    def find_job_documents(self, filter=None):
+    def find_job_documents(self, filter=None, doc_filter=None):
         """Find all job documents in the project's workspace.
 
         This method iterates through all jobs or all jobs matching
@@ -331,12 +339,15 @@ class Project(object):
         the job's id.
 
         :param filter: If not None,
-            only find job documents matching filter.
+            only find job documents for statepoints matching filter.
+        :param doc_filter: If not None,
+            only find job documents matching doc_filter.
         :type filter: mapping
+        :type doc_filter: mapping
         :yields: Instances of dict.
         :raises KeyError: If the job document already contains the fields
             '_id' or 'statepoint'."""
-        for job in self.find_jobs(filter=filter):
+        for job in self.find_jobs(filter=filter, doc_filter=doc_filter):
             doc = dict(job.document)
             if '_id' in doc:
                 raise KeyError(
