@@ -147,7 +147,7 @@ In this context those crawlers are called *slave crawlers*.
 Any crawler (including other master crawlers) can be *slave crawlers*.
 
 The *master crawler* adds information about its origin to each document.
-This allows to fetch data from the *master index*, which is almost independent of the actual location of the data within the file system.
+This allows it to fetch data from the *master index*, which is almost independent of the actual location of the data within the file system.
 
 .. _signac-access:
 
