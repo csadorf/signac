@@ -16,10 +16,12 @@ declare -a envs=(
   "signac-py33"
   "signac-py34"
   "signac-py35"
+  "signac-py36"
   "signac-py27-minimal"
   "signac-py33-minimal"
   "signac-py34-minimal"
-  "signac-py35-minimal")
+  "signac-py35-minimal"
+  "signac-py36-minimal")
 
 for env in "${envs[@]}"; do
   source activate $env

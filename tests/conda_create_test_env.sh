@@ -4,10 +4,12 @@ conda env remove --yes -n signac-py27
 conda env remove --yes -n signac-py33
 conda env remove --yes -n signac-py34
 conda env remove --yes -n signac-py35
+conda env remove --yes -n signac-py36
 conda env remove --yes -n signac-py27-minimal
 conda env remove --yes -n signac-py33-minimal
 conda env remove --yes -n signac-py34-minimal
 conda env remove --yes -n signac-py35-minimal
+conda env remove --yes -n signac-py36-minimal
 
 echo "Creating environment for python 2.7."
 conda create --yes -n signac-py27 python=2.7 pymongo mpi4py
@@ -50,6 +52,16 @@ python setup.py develop
 . deactivate
 echo "Done."
 
+echo "Creating environment for python 3.6."
+conda create --yes -n signac-py36 python=3.6 pymongo mpi4py
+if [ "$?" != "0" ]; then
+  conda create --yes -n signac-py36 python=3.6
+fi
+. activate signac-py36
+python setup.py develop
+. deactivate
+echo "Done."
+
 echo "Creating minimal environment for python 2.7."
 conda create --yes -n signac-py27-minimal python=2.7
 . activate signac-py27-minimal
@@ -74,6 +86,13 @@ echo "Done."
 echo "Creating minimal environment for python 3.5."
 conda create --yes -n signac-py35-minimal python=3.5
 . activate signac-py35-minimal
+python setup.py develop
+. deactivate
+echo "Done."
+
+echo "Creating minimal environment for python 3.6."
+conda create --yes -n signac-py36-minimal python=3.6
+. activate signac-py36-minimal
 python setup.py develop
 . deactivate
 echo "Done."
