@@ -13,6 +13,7 @@ from time import sleep
 from ..core.json import json
 from ..common import six
 from ..common import errors
+from ..common.config import load_config
 from .utility import walkdepth, is_string
 from .hashing import calc_id
 
@@ -307,6 +308,18 @@ class JSONCrawler(BaseCrawler):
                     yield d
 
 
+def _get_project_id(root):
+    root = os.path.realpath(root)
+    try:
+        return _get_project_id._cache[root]
+    except KeyError:
+        logger.debug("Determine project id for path '{}'.".format(root))
+        project_id = load_config(root=root)['project']
+        _get_project_id._cache[root] = project_id
+        return project_id
+_get_project_id._cache = dict()  # noqa
+
+
 def _index_signac_project_workspace(root,
                                     include_job_document=True,
                                     fn_statepoint='signac_statepoint.json',
@@ -389,6 +402,7 @@ class SignacProjectCrawler(RegexFileCrawler):
         return job_id, self._get_statepoint(self, job_id)
 
     def process(self, doc, dirpath, fn):
+        doc.setdefault(KEY_PROJECT, _get_project_id(self.root))
         if dirpath is not None:
             job_id = self._get_job_id(dirpath)
             statepoint = self._get_statepoint(job_id)
