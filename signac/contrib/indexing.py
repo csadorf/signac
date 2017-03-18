@@ -8,7 +8,9 @@ import hashlib
 import logging
 import warnings
 import errno
+import sqlite3
 from time import sleep
+from collections.abc import Mapping
 
 from ..core.json import json
 from ..common import six
@@ -638,6 +640,8 @@ def export(docs, index, mirrors=None, num_tries=3, timeout=60, **kwargs):
     :param kwargs: Optional keyword arguments to pass to
         delegate implementations.
     """
+    if isinstance(index, sqlite3.Connection):
+        return export_sqlite3(docs, index)
     try:
         import pymongo
     except ImportError:
@@ -711,3 +715,69 @@ def export_pymongo(docs, index, mirrors=None, num_tries=3, timeout=60, chunksize
     if len(operations):
         logger.debug("Pushing final chunk.")
         _export_pymongo(chunk, operations, index, mirrors, num_tries, timeout)
+
+
+def export_sqlite3(docs, conn, statepoints='statepoints', dataindex='dataindex'):
+    "Provided by Kyle Pettibone."
+    docs = list(docs)
+    def get_statepoint_table(docs):
+        ids = set()
+        for doc in docs:
+            d = doc['statepoint']
+            _id = doc['signac_id']
+            if _id not in ids:
+                d['_id'] = doc['signac_id']
+                yield d
+                ids.add(_id)
+
+    def signac_cmd(docs):
+        from itertools import tee
+        a, b = tee(docs)
+        statepoint_table = get_statepoint_table(a)
+        return statepoint_table, b
+
+    a, b = signac_cmd(docs)
+
+    def identify_columns(docs):
+        columns = dict()
+        for doc in docs:
+            for key, value in doc.items():
+                if isinstance(value, Mapping):
+                    logger.debug("Skipping nested value.")
+                    continue
+                columns[key] = type(value)
+        return columns
+
+    def export_sql(name, docs):
+        column_types = identify_columns(docs)
+        assert '_id' in column_types
+        columns = sorted(column_types.keys())
+        columns.remove('_id')
+        ct = ('{} {}'.format(cn, column_types[cn].__name__) for cn in columns)
+        columns_str = '( _id str primary key, ' + ', '.join(ct) + ')'
+        columns.insert(0, '_id')
+        yield '''CREATE TABLE {}
+                {}'''.format(name, columns_str), None
+        ids = set()
+        for doc in docs:
+            if doc['_id'] in ids:
+                continue
+            else:
+                ids.add(doc['_id'])
+            yield 'INSERT INTO {} VALUES ({})'.format(
+                name,
+                ', '.join(('?' for i in range(len(columns))))),\
+                [doc.get(cn) for cn in columns]
+
+    def execute_sql(c, cmd, params):
+        if params is None:
+            c.execute(cmd)
+        else:
+            c.execute(cmd, params)
+
+    c = conn.cursor()
+    for sql_cmd, params in export_sql(statepoints, list(a)):
+        execute_sql(c, sql_cmd, params)
+    for sql_cmd, params in export_sql(dataindex, list(b)):
+        execute_sql(c, sql_cmd, params)
+    conn.commit()
