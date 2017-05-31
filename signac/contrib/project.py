@@ -10,6 +10,7 @@ import errno
 import collections
 import shutil
 from itertools import chain
+from contextlib import contextmanager
 
 from ..core.json import json
 from .collection import Collection
@@ -111,6 +112,7 @@ class Project(object):
         if config is None:
             config = load_config()
         self._config = config
+        self._index = None
         self.get_id()
 
     def __str__(self):
@@ -155,6 +157,38 @@ class Project(object):
             return wd
         else:
             return os.path.join(self.root_directory(), wd)
+
+    def _update_index(self):
+        from tqdm import tqdm
+        assert self._index is not None
+        current_ids = set(self.find_job_ids())
+        cached_ids = set(self._index.ids)
+        to_update = current_ids.difference(cached_ids)
+        to_remove = cached_ids.difference(current_ids)
+        if to_remove:
+            logger.debug("Removing {} cached entries...".format(len(to_remove)))
+        for _id in to_remove:
+            del self._index[_id]
+        if len(to_update) > 100:
+            logger.warning("Updating {} cache entries...".format(len(to_update)))
+        elif to_update:
+            logger.debug("Updating {} cache entries...".format(len(to_update)))
+        if to_update:
+            for _id in tqdm(to_update):
+                self._index[_id] = dict(statepoint=self.open_job(id=_id).statepoint())
+
+    def __enter__(self):
+        if self._index is None:
+            logger.debug("Load cached index...")
+            fn_index = os.path.join(self.root_directory(), '.signac_index.txt')
+            self._index = Collection.open(fn_index)
+
+    def __exit__(self, err_type, err_value, tb):
+        if self._index is not None:
+            fn_index = os.path.join(self.root_directory(), '.signac_index.txt')
+            logger.debug("Store cached index...")
+            self._index.close()
+            self._index = None
 
     def get_id(self):
         """Get the project identifier.
@@ -211,7 +245,7 @@ class Project(object):
             raise ValueError(
                 "You need to either provide the statepoint or the id.")
         if id is None:
-            return self.Job(project=self, statepoint=statepoint)
+            job = self.Job(project=self, statepoint=statepoint)
         else:
             if len(id) < 32:
                 job_ids = self.find_job_ids()
@@ -220,7 +254,10 @@ class Project(object):
                     id = matches[0]
                 elif len(matches) > 1:
                     raise LookupError(id)
-            return self.Job(project=self, statepoint=self.get_statepoint(id))
+            job = self.Job(project=self, statepoint=self.get_statepoint(id))
+        if self._index is not None:
+            self._index[job.get_id()] = dict(statepoint=job.statepoint())
+        return job
 
     def _job_dirs(self):
         wd = self.workspace()
@@ -341,7 +378,11 @@ class Project(object):
         if filter is None and doc_filter is None and index is None:
             return list(self._job_dirs())
         if index is None:
-            index = self.index(include_job_document=doc_filter is not None)
+            if self._index is None:
+                index = self.index(include_job_document=doc_filter is not None)
+            else:
+                self._update_index()
+                index = self._index
         search_index = self.build_job_search_index(index)
         return search_index.find_job_ids(filter=filter, doc_filter=doc_filter)
 
@@ -486,7 +527,10 @@ class Project(object):
         See also :meth:`dump_statepoints`.
         """
         try:
-            statepoint = self._get_statepoint_from_workspace(jobid)
+            if self._index is None or jobid not in self._index:
+                statepoint = self._get_statepoint_from_workspace(jobid)
+            else:
+                statepoint = self._index[jobid]['statepoint']
         except KeyError:
             try:
                 statepoint = self.read_statepoints(fn=fn)[jobid]

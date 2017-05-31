@@ -374,7 +374,7 @@ class Collection(object):
                 raise TypeError("The primary key must be of type str!")
         doc.setdefault(self.primary_key, _id)
         if _id != doc[self.primary_key]:
-            raise ValueError("Primary key mismatch!")
+            raise ValueError("Primary key mismatch: {}={}".format(_id, doc[self.primary_key]))
         self._docs[_id] = json.loads(json.dumps(doc))
         self._dirty.add(_id)
         self._requires_flush = True

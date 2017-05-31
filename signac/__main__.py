@@ -128,19 +128,18 @@ def _open_job_by_id(project, job_id):
                           "unique ids.".format(job_id, n))
 
 
-def find_with_filter(args):
+def find_with_filter(project, args):
     if getattr(args, 'job_id', None):
         if args.filter or args.doc_filter:
             raise ValueError("Can't provide both 'job-id' and filter arguments!")
         else:
             return args.job_id
 
-    project = get_project()
     index = _read_index(project, args.index)
 
     f = parse_filter_arg(args.filter)
     df = parse_filter_arg(args.doc_filter)
-    return get_project().find_job_ids(index=index, filter=f, doc_filter=df)
+    return project.find_job_ids(index=index, filter=f, doc_filter=df)
 
 
 def main_project(args):
@@ -194,7 +193,7 @@ def main_statepoint(args):
 
 def main_document(args):
     project = get_project()
-    for job_id in find_with_filter(args):
+    for job_id in find_with_filter(project, args):
         job = _open_job_by_id(project, job_id)
         if args.pretty:
             pprint(dict(job.document), depth=args.pretty)
@@ -240,40 +239,41 @@ def main_index(args):
 
 def main_find(args):
     project = get_project()
+    with project:
 
-    if args.show:
-        len_id = max(6, project.min_len_unique_id())
+        if args.show:
+            len_id = max(6, project.min_len_unique_id())
 
-        def format_lines(cat, _id, s):
-            if args.one_line:
-                if isinstance(s, dict):
-                    s = json.dumps(s, sort_keys=True)
-                return _id[:len_id] + ' ' + cat + '\t' + s
+            def format_lines(cat, _id, s):
+                if args.one_line:
+                    if isinstance(s, dict):
+                        s = json.dumps(s, sort_keys=True)
+                    return _id[:len_id] + ' ' + cat + '\t' + s
+                else:
+                    return pformat(s, depth=args.show)
+
+        try:
+            for job_id in find_with_filter(project, args):
+                if args.show:
+                    job = project.open_job(id=job_id)
+                    jid = job.get_id()
+                    print(jid)
+                    print(format_lines('sp ', jid, job.statepoint()))
+                    print(format_lines('doc', jid, dict(job.document)))
+                else:
+                    print(job_id)
+        except IOError as error:
+            if error.errno == errno.EPIPE:
+                sys.stderr.close()
             else:
-                return pformat(s, depth=args.show)
-
-    try:
-        for job_id in find_with_filter(args):
-            if args.show:
-                job = project.open_job(id=job_id)
-                jid = job.get_id()
-                print(jid)
-                print(format_lines('sp ', jid, job.statepoint()))
-                print(format_lines('doc', jid, dict(job.document)))
-            else:
-                print(job_id)
-    except IOError as error:
-        if error.errno == errno.EPIPE:
-            sys.stderr.close()
-        else:
-            raise
+                raise
 
 
 def main_view(args):
     project = get_project()
     project.create_linked_view(
         prefix=args.prefix,
-        job_ids=find_with_filter(args),
+        job_ids=find_with_filter(project, args),
         index=_read_index(args.index))
 
 
