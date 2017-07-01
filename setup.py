@@ -1,9 +1,22 @@
+from __future__ import print_function
 import sys
+import subprocess
 from setuptools import setup, find_packages
+from setuptools.command.install import install
 
 if sys.version_info < (2, 7, 0):
     print("Error: signac requires python version >= 2.7.x.")
     sys.exit(1)
+
+
+class CheckExecutableCommand(install):
+    def run(self):
+        super(CheckExecutableCommand, self).run()
+        try:
+            subprocess.check_output('signac')
+        except OSError as e:
+            print("COULD NOT START SIGNAC!!", e)
+
 
 setup(
     name='signac',
@@ -40,5 +53,9 @@ setup(
         'console_scripts': [
             'signac = signac.__main__:main',
         ],
+    },
+
+    cmdclass={
+        'install': CheckExecutableCommand,
     },
 )
