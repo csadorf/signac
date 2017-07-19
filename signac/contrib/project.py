@@ -137,6 +137,11 @@ class Project(object):
         "Returns the project's root directory."
         return self._config['project_dir']
 
+    @property
+    def root(self):
+        "The project's root directory."
+        return self.root_directory()
+
     def workspace(self):
         """Returns the project's workspace directory.
 
