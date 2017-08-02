@@ -146,7 +146,10 @@ def _print_doc(doc, args):
             _print_err("Sort keys has no effect with pretty print.")
         pprint(doc, indent=args.indent, depth=args.pretty)
     else:
-        print(json.dumps(doc, indent=args.indent if args.indent > 0 else None, sort_keys=args.sort))
+        if args.indent is not None and args.indent > 0:
+            print(json.dumps(doc, indent=args.indent, sort_keys=args.sort))
+        else:
+            print(json.dumps(doc, sort_keys=args.sort))
 
 
 def find_with_filter(args):
