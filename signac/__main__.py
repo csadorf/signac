@@ -143,7 +143,7 @@ def _get_value(doc, key):
 def _print_doc(doc, args):
     if args.pretty:
         if args.sort:
-            logger.warning("Sort keys has no effect with pretty print.")
+            _print_err("Sort keys has no effect with pretty print.")
         pprint(doc, indent=args.indent, depth=args.pretty)
     else:
         print(json.dumps(doc, indent=args.indent if args.indent > 0 else None, sort_keys=args.sort))
