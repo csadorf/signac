@@ -128,6 +128,27 @@ def _open_job_by_id(project, job_id):
                           "unique ids.".format(job_id, n))
 
 
+def _get_value(doc, key):
+    "Return possibly nested values from doc."
+    try:
+        return doc[key]
+    except KeyError:
+        nodes = key.split('.')
+        if len(nodes) > 1:
+            return _get_value(doc[nodes[0]], '.'.join(nodes[1:]))
+        else:
+            raise
+
+
+def _print_doc(doc, args):
+    if args.pretty:
+        if args.sort:
+            logger.warning("Sort keys has no effect with pretty print.")
+        pprint(doc, indent=args.indent, depth=args.pretty)
+    else:
+        print(json.dumps(doc, indent=args.indent if args.indent > 0 else None, sort_keys=args.sort))
+
+
 def find_with_filter(args):
     if getattr(args, 'job_id', None):
         if args.filter or args.doc_filter:
@@ -186,20 +207,22 @@ def main_statepoint(args):
     else:
         jobs = project
     for job in jobs:
-        if args.pretty:
-            pprint(job.statepoint(), depth=args.pretty)
+        if args.key:
+            try:
+                sp = _get_value(job.statepoint(), args.key)
+            except KeyError:
+                raise KeyError(
+                    "Job '{}' has no state point key '{}'.".format(job, args.key))
         else:
-            print(json.dumps(job.statepoint(), indent=args.indent, sort_keys=args.sort))
+            sp = job.statepoint()
+        _print_doc(sp, args)
 
 
 def main_document(args):
     project = get_project()
     for job_id in find_with_filter(args):
         job = _open_job_by_id(project, job_id)
-        if args.pretty:
-            pprint(dict(job.document), depth=args.pretty)
-        else:
-            print(json.dumps(dict(job.document), indent=args.indent, sort_keys=args.sort))
+        _print_doc(dict(job.document), args)
 
 
 def main_move(args):
@@ -634,7 +657,7 @@ def main():
     parser_statepoint = subparsers.add_parser(
         'statepoint',
         description="Print the statepoint(s) corresponding to one or "
-                    "more job ids.")
+                    "more job ids, by default in JSON format.")
     parser_statepoint.add_argument(
         'job_id',
         nargs='*',
@@ -642,29 +665,33 @@ def main():
         help="One or more job ids. The job corresponding to a job "
              "id must be initialized.")
     parser_statepoint.add_argument(
+        '-k', '--key',
+        type=str,
+        help="Return the value of a specific state point key.")
+    parser_statepoint.add_argument(
         '-p', '--pretty',
         type=int,
         nargs='?',
         const=3,
         help="Print state point in pretty format. "
              "An optional argument to this flag specifies the maximal "
-             "depth a state point is printed.")
+             "depth a state point is printed (default=3).")
     parser_statepoint.add_argument(
         '-i', '--indent',
         type=int,
         nargs='?',
         const='2',
-        help="Specify the indentation of the JSON formatted state point.")
+        help="Specify the desired indentation for JSON formatting (default=2).")
     parser_statepoint.add_argument(
         '-s', '--sort',
         action='store_true',
-        help="Sort the state point keys for output.")
+        help="Sort the state point keys for JSON formatting.")
     parser_statepoint.set_defaults(func=main_statepoint)
 
     parser_document = subparsers.add_parser(
         'document',
         description="Print the document(s) corresponding to one or "
-                    "more job ids.")
+                    "more job ids, by default in JSON format.")
     parser_document.add_argument(
         'job_id',
         nargs='*',
@@ -678,17 +705,17 @@ def main():
         const=3,
         help="Print document in pretty format. "
              "An optional argument to this flag specifies the maximal "
-             "depth a document is printed.")
+             "depth a document is printed (default=3).")
     parser_document.add_argument(
         '-i', '--indent',
         type=int,
         nargs='?',
         const='2',
-        help="Specify the indentation of the JSON formatted state point.")
+        help="Specify the desired indentation for JSON formatting (default=2).")
     parser_document.add_argument(
         '-s', '--sort',
         action='store_true',
-        help="Sort the document keys for output in JSON format.")
+        help="Sort the document keys for JSON formatting.")
     parser_document.add_argument(
         '-f', '--filter',
         type=str,
