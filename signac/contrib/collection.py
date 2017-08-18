@@ -806,7 +806,6 @@ class Collection(_Collection):
             self._requires_flush = False  # not needed after initial read!
             self._update_indexes()
 
-
     @classmethod
     def _open(cls, file):
         try:
@@ -902,26 +901,33 @@ class Collection(_Collection):
         self.close()
 
 
-class CompressedCollection(_Collection):
+class ZippedCollection(Collection):
 
-    def __init__(self, filename, **kwargs):
-        super(CompressedCollection, self).__init__(**kwargs)
+    @classmethod
+    def open(cls, filename, mode='ab+'):
+        return super().open(filename, mode)
 
+    @classmethod
+    def _open(cls, file):
+        logger.debug("Reading and decompressing file...")
+        try:
+            data = gzip.decompress(file.read())
+            txt = io.StringIO()
+            txt.write(data.decode())
+            txt.flush()
+            txt.seek(0)
+            c = super()._open(txt)
+        except IOError:
+            c = cls()
+        c._file = file
+        return c
 
-    def open(self):
-        with gzip.open(filename, mode='rb') as gfile:
-            file = io.StringIO()
-            file.write(gfile.read().decode())
-            file.seek(0)
-            self._docs.update(Collection._open(file))
-
-        self._filename = filename
-
-    def close(self):
-        with gzip
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, t, v, tb):
-        self.close()
+    def dump(self, file):
+        txt = io.StringIO()
+        super().dump(txt)
+        txt.flush()
+        txt.seek(0)
+        logger.debug("Compressing file...")
+        data = gzip.compress(txt.read().encode())
+        logger.debug("Writing file...")
+        file.write(data)
