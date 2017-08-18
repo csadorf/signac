@@ -19,6 +19,7 @@ import logging
 import warnings
 import argparse
 import operator
+import gzip
 from collections import defaultdict
 from itertools import islice
 from uuid import uuid4
@@ -196,72 +197,13 @@ class _CollectionSearchResults(object):
     count = __len__
 
 
-class Collection(object):
-    """A collection of documents.
+class _Collection(object):
 
-    The Collection class manages a collection of documents in memory
-    or in a file on disk. A document is defined as a dictionary mapping
-    of key-value pairs.
-
-    An instance of collection may be used to manage and search documents.
-    For example, given a collection with member data, where each document
-    contains a `name` entry and an `age` entry, we can find the name of
-    all members that are at age 32 like this:
-
-    .. code-block:: python
-
-        members = [
-            {'name': 'John',  'age': 32},
-            {'name': 'Alice', 'age': 28},
-            {'name': 'Kevin', 'age': 32},
-            # ...
-            ]
-
-        member_collection = Collection(members)
-        for doc in member_collection.find({'age': 32}):
-            print(doc['name'])
-
-    To iterate over all documents in the collection, use:
-
-    .. code-block:: python
-
-        for doc in collection:
-            print(doc)
-
-    By default a collection object will reside in memory. However, it is
-    possible to manage a collection associated to a file on disk. To open
-    a collection which is associated with a file on disk, use the
-    :py:meth:`.open` class method:
-
-    .. code-block:: python
-
-        with Collection.open('collection.txt') as collection:
-            for doc in collection.find({'age': 32}):
-                print(doc)
-
-    The collection file is by default opened in `a+` mode, which means it can
-    be read from and written to and will be created if it does not exist yet.
-
-    :param docs: Initialize the collection with these documents.
-    :param primary_key: The name of the key which serves as the primary
-        index of the collection. Selecting documents by primary key has
-        time complexity of O(N) in the worst case and O(1) on average.
-        All documents must have a primary key value. The default primary
-        key is `_id`.
-    """
-
-    def __init__(self, docs=None, primary_key='_id'):
+    def __init__(self, primary_key='_id'):
         self._primary_key = primary_key
-        self._file = io.StringIO()
-        self._requires_flush = False
         self._dirty = set()
         self._indexes = dict()
         self._docs = dict()
-        if docs is not None:
-            for doc in docs:
-                self[doc[self.primary_key]] = doc
-            self._requires_flush = False  # not needed after initial read!
-            self._update_indexes()
 
     def _assert_open(self):
         if self._docs is None:
@@ -743,6 +685,127 @@ class Collection(object):
         for doc in self._docs.values():
             file.write(json.dumps(doc) + '\n')
 
+    def main(self):
+        """Start a command line interface for this Collection.
+
+        Use this function to interact with this instance of Collection
+        on the command line. For example, executing the following script:
+
+        .. code-block:: python
+
+            # find.py
+            with Collection.open('my_collection.txt') as c:
+                c.main()
+
+        will enable us to search for documents on the command line like this:
+
+        .. code-block:: bash
+
+            $ python find.py '{"age": 32}'
+            {"name": "John", "age": 32}
+            {"name": "Kevin", "age": 32}
+
+        """
+        parser = argparse.ArgumentParser(
+            "Command line interface for instances of Collection.")
+        parser.add_argument(
+            'filter',
+            nargs='*',
+            help="The search filter provided in JSON encoding. "
+                 "Leave empty to return all documents.")
+        parser.add_argument(
+            '-l', '--limit',
+            type=int,
+            default=0,
+            help="Limit the number of search results that are "
+                 "maximally returned. A value of 0 (the default) "
+                 "means no limit.")
+        parser.add_argument(
+            '--id',
+            dest='_id',
+            action='store_true',
+            help="Print a document's primary key instead of the whole document.")
+        parser.add_argument(
+            '-i', '--indent',
+            action='store_true',
+            help="Print results in indented format.")
+        args = parser.parse_args()
+        if args._id and args.indent:
+            raise ValueError("Select either `--id` or `--indent`, not both.")
+        f = parse_filter_arg(args.filter)
+        for doc in self.find(f, limit=args.limit):
+            if args._id:
+                print(doc[self.primary_key])
+            else:
+                if args.indent:
+                    print(json.dumps(doc, indent=2))
+                else:
+                    print(json.dumps(doc))
+
+
+class Collection(_Collection):
+    """A collection of documents.
+
+    The Collection class manages a collection of documents in memory
+    or in a file on disk. A document is defined as a dictionary mapping
+    of key-value pairs.
+
+    An instance of collection may be used to manage and search documents.
+    For example, given a collection with member data, where each document
+    contains a `name` entry and an `age` entry, we can find the name of
+    all members that are at age 32 like this:
+
+    .. code-block:: python
+
+        members = [
+            {'name': 'John',  'age': 32},
+            {'name': 'Alice', 'age': 28},
+            {'name': 'Kevin', 'age': 32},
+            # ...
+            ]
+
+        member_collection = Collection(members)
+        for doc in member_collection.find({'age': 32}):
+            print(doc['name'])
+
+    To iterate over all documents in the collection, use:
+
+    .. code-block:: python
+
+        for doc in collection:
+            print(doc)
+
+    By default a collection object will reside in memory. However, it is
+    possible to manage a collection associated to a file on disk. To open
+    a collection which is associated with a file on disk, use the
+    :py:meth:`.open` class method:
+
+    .. code-block:: python
+
+        with Collection.open('collection.txt') as collection:
+            for doc in collection.find({'age': 32}):
+                print(doc)
+
+    The collection file is by default opened in `a+` mode, which means it can
+    be read from and written to and will be created if it does not exist yet.
+
+    :param docs: Initialize the collection with these documents.
+    :param primary_key: The name of the key which serves as the primary
+        index of the collection. Selecting documents by primary key has
+        time complexity of O(N) in the worst case and O(1) on average.
+        All documents must have a primary key value. The default primary
+        key is `_id`.
+    """
+    def __init__(self, docs=None, primary_key='_id'):
+        super(Collection, self).__init__(primary_key=primary_key)
+        self._file = io.StringIO()
+        self._requires_flush = False
+        if docs is not None:
+            for doc in docs:
+                self[doc[self.primary_key]] = doc
+            self._requires_flush = False  # not needed after initial read!
+            self._update_indexes()
+
     @classmethod
     def _open(cls, file):
         try:
@@ -837,59 +900,34 @@ class Collection(object):
     def __exit__(self, t, v, tb):
         self.close()
 
-    def main(self):
-        """Start a command line interface for this Collection.
 
-        Use this function to interact with this instance of Collection
-        on the command line. For example, executing the following script:
+class ZippedCollection(Collection):
 
-        .. code-block:: python
+    @classmethod
+    def open(cls, filename, mode='ab+'):
+        return super().open(filename, mode)
 
-            # find.py
-            with Collection.open('my_collection.txt') as c:
-                c.main()
+    @classmethod
+    def _open(cls, file):
+        logger.debug("Reading and decompressing file...")
+        try:
+            data = gzip.decompress(file.read())
+            txt = io.StringIO()
+            txt.write(data.decode())
+            txt.flush()
+            txt.seek(0)
+            c = super()._open(txt)
+        except IOError:
+            c = cls()
+        c._file = file
+        return c
 
-        will enable us to search for documents on the command line like this:
-
-        .. code-block:: bash
-
-            $ python find.py '{"age": 32}'
-            {"name": "John", "age": 32}
-            {"name": "Kevin", "age": 32}
-
-        """
-        parser = argparse.ArgumentParser(
-            "Command line interface for instances of Collection.")
-        parser.add_argument(
-            'filter',
-            nargs='*',
-            help="The search filter provided in JSON encoding. "
-                 "Leave empty to return all documents.")
-        parser.add_argument(
-            '-l', '--limit',
-            type=int,
-            default=0,
-            help="Limit the number of search results that are "
-                 "maximally returned. A value of 0 (the default) "
-                 "means no limit.")
-        parser.add_argument(
-            '--id',
-            dest='_id',
-            action='store_true',
-            help="Print a document's primary key instead of the whole document.")
-        parser.add_argument(
-            '-i', '--indent',
-            action='store_true',
-            help="Print results in indented format.")
-        args = parser.parse_args()
-        if args._id and args.indent:
-            raise ValueError("Select either `--id` or `--indent`, not both.")
-        f = parse_filter_arg(args.filter)
-        for doc in self.find(f, limit=args.limit):
-            if args._id:
-                print(doc[self.primary_key])
-            else:
-                if args.indent:
-                    print(json.dumps(doc, indent=2))
-                else:
-                    print(json.dumps(doc))
+    def dump(self, file):
+        txt = io.StringIO()
+        super().dump(txt)
+        txt.flush()
+        txt.seek(0)
+        logger.debug("Compressing file...")
+        data = gzip.compress(txt.read().encode())
+        logger.debug("Writing file...")
+        file.write(data)
