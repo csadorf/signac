@@ -13,7 +13,7 @@ from itertools import chain
 from contextlib import contextmanager
 
 from ..core.json import json
-from .collection import Bz2Collection
+from .collection import Collection
 from ..common import six
 from ..common.config import load_config
 from .job import Job
@@ -159,7 +159,6 @@ class Project(object):
             return os.path.join(self.root_directory(), wd)
 
     def _update_index(self):
-        from tqdm import tqdm
         assert self._index is not None
         current_ids = set(self.find_job_ids())
         cached_ids = set(self._index.ids)
@@ -174,20 +173,15 @@ class Project(object):
         elif to_update:
             logger.debug("Updating {} cache entries...".format(len(to_update)))
         if to_update:
-            for _id in tqdm(to_update):
+            for _id in to_update:
                 self._index[_id] = dict(statepoint=self.open_job(id=_id).statepoint())
 
     def __enter__(self):
         if self._index is None:
-            logger.debug("Load cached index...")
-            fn_index = os.path.join(self.root_directory(), '.signac_index.txt.bz2')
-            self._index = Bz2Collection.open(fn_index)
+            self._index = Collection()
 
     def __exit__(self, err_type, err_value, tb):
         if self._index is not None:
-            fn_index = os.path.join(self.root_directory(), '.signac_index.txt.bz2')
-            logger.debug("Store cached index...")
-            self._index.close()
             self._index = None
 
     def get_id(self):
