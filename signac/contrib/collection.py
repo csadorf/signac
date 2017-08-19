@@ -19,6 +19,7 @@ import logging
 import warnings
 import argparse
 import operator
+import bz2
 import gzip
 from collections import defaultdict
 from itertools import islice
@@ -901,7 +902,8 @@ class Collection(_Collection):
         self.close()
 
 
-class ZippedCollection(Collection):
+class _CompressedCollection(Collection):
+    compression_lib = None
 
     @classmethod
     def open(cls, filename, mode='ab+'):
@@ -911,13 +913,13 @@ class ZippedCollection(Collection):
     def _open(cls, file):
         logger.debug("Reading and decompressing file...")
         try:
-            data = gzip.decompress(file.read())
+            data = cls.compression_lib.decompress(file.read())
             txt = io.StringIO()
             txt.write(data.decode())
             txt.flush()
             txt.seek(0)
             c = super()._open(txt)
-        except IOError:
+        except (IOError, io.UnsupportedOperation):
             c = cls()
         c._file = file
         return c
@@ -928,6 +930,14 @@ class ZippedCollection(Collection):
         txt.flush()
         txt.seek(0)
         logger.debug("Compressing file...")
-        data = gzip.compress(txt.read().encode())
+        data = self.compression_lib.compress(txt.read().encode())
         logger.debug("Writing file...")
         file.write(data)
+
+
+class Bz2Collection(_CompressedCollection):
+    compression_lib = bz2
+
+
+class GzipCollection(_CompressedCollection):
+    compression_lib = gzip
