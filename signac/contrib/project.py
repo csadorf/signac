@@ -224,11 +224,21 @@ class Project(object):
 
     def _job_dirs(self):
         wd = self.workspace()
-        m = re.compile('[a-f0-9]{32}')
+
         try:
-            for d in os.listdir(wd):
-                if m.match(d):
-                    yield d
+            if wd.endswith('.tar.gz'):
+                import tarfile
+                m = re.compile('./[a-f0-9]{32}')
+                with tarfile.open(wd) as tar:
+                    prefix = os.path.commonprefix(tar.getnames())
+                    for member in tar.getmembers():
+                        if member.isdir() and m.match(member.name):
+                            yield member.name[2:]
+            else:
+                m = re.compile('[a-f0-9]{32}')
+                for d in os.listdir(wd):
+                    if m.match(d):
+                        yield d
         except OSError as error:
             if error.errno != errno.ENOENT:
                 raise
@@ -456,16 +466,24 @@ class Project(object):
             file.write(json.dumps(tmp, indent=indent))
 
     def _get_statepoint_from_workspace(self, jobid):
-        fn_manifest = os.path.join(self.workspace(), jobid, self.Job.FN_MANIFEST)
-        try:
-            with open(fn_manifest, 'r') as manifest:
-                return json.loads(manifest.read())
-        except (IOError, ValueError) as error:
-            if os.path.isfile(fn_manifest):
-                msg = "Error while trying to access manifest file: "\
-                      "'{}'. Error: '{}'.".format(fn_manifest, error)
-                logger.critical(msg)
-            raise KeyError(jobid)
+        if self.workspace().endswith('.tar.gz'):
+            import tarfile
+            fn_manifest = os.path.join('.', jobid, self.Job.FN_MANIFEST)
+            with tarfile.open(self.workspace()) as tar:
+                member = tar.getmember(fn_manifest)
+                file = tar.extractfile(member)
+                return json.loads(file.read().decode())
+        else:
+            fn_manifest = os.path.join(self.workspace(), jobid, self.Job.FN_MANIFEST)
+            try:
+                with open(fn_manifest, 'r') as manifest:
+                    return json.loads(manifest.read())
+            except (IOError, ValueError) as error:
+                if os.path.isfile(fn_manifest):
+                    msg = "Error while trying to access manifest file: "\
+                          "'{}'. Error: '{}'.".format(fn_manifest, error)
+                    logger.critical(msg)
+                raise KeyError(jobid)
 
     def get_statepoint(self, jobid, fn=None):
         """Get the statepoint associated with a job id.
