@@ -13,7 +13,7 @@ from itertools import chain
 from contextlib import contextmanager
 
 from ..core.json import json
-from .collection import Collection
+from .collection import Bz2Collection
 from ..common import six
 from ..common.config import load_config
 from .job import Job
@@ -180,12 +180,12 @@ class Project(object):
     def __enter__(self):
         if self._index is None:
             logger.debug("Load cached index...")
-            fn_index = os.path.join(self.root_directory(), '.signac_index.txt')
-            self._index = Collection.open(fn_index)
+            fn_index = os.path.join(self.root_directory(), '.signac_index.txt.bz2')
+            self._index = Bz2Collection.open(fn_index)
 
     def __exit__(self, err_type, err_value, tb):
         if self._index is not None:
-            fn_index = os.path.join(self.root_directory(), '.signac_index.txt')
+            fn_index = os.path.join(self.root_directory(), '.signac_index.txt.bz2')
             logger.debug("Store cached index...")
             self._index.close()
             self._index = None
