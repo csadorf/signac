@@ -26,33 +26,43 @@ if six.PY2:
         pass
 
 
-def convert_to_dict(m):
+def _convert_to_dict(m):
     "Convert (nested) values of AttrDict to dict."
     ret = dict()
     if isinstance(m, _SyncedDict):
         for k in m:
-            ret[k] = convert_to_dict(m[k])
+            ret[k] = _convert_to_dict(m[k])
     elif isinstance(m, Mapping):
         for k, v in m.items():
-            ret[k] = convert_to_dict(v)
+            ret[k] = _convert_to_dict(v)
     elif isinstance(m, list):
-        return [convert_to_dict(x) for x in m]
+        return [_convert_to_dict(x) for x in m]
     else:
         return m
     return ret
 
 
-def convert_to_synced_dict(m, parent):
+def _convert_to_synced_dict(m, parent):
     "Convert (nested) values of AttrDict to dict."
     ret = _SyncedDict(parent)
     if isinstance(m, Mapping):
         for k in m:
-            ret[k] = convert_to_synced_dict(m[k], ret)
+            ret[k] = _convert_to_synced_dict(m[k], ret)
     elif isinstance(m, list):
-        return [convert_to_synced_dict(i) for i in m]
+        return [_convert_to_synced_dict(i) for i in m]
     else:
         return m
     return ret
+
+
+def _update_synced_dict(orig, new):
+    assert isinstance(orig, Mapping)
+    assert isinstance(new, Mapping)
+    for k in new:
+        if k in orig and isinstance(orig[k], Mapping) and isinstance(new[k], Mapping):
+            _update_synced_dict(orig[k], new[k])
+        else:
+            orig[k] = _convert_to_synced_dict(new[k], orig)
 
 
 class _SyncedDict(UserDict):
@@ -78,7 +88,7 @@ class _SyncedDict(UserDict):
             self._parent.save()
 
     def __setitem__(self, key, value):
-        # self.load()
+        self.load()
         with self._suspend_sync():
             if isinstance(value, Mapping):
                 value = _SyncedDict(self, value)
@@ -95,12 +105,13 @@ class _SyncedDict(UserDict):
         return self.data.get(key, default)
 
     def __delitem__(self, key):
-        # self.load()
+        self.load()
         del self.data[key]
         self.save()
 
     def clear(self):
-        self.data.clear()
+        with self._suspend_sync():
+            self.data.clear()
         self.save()
 
     def update(self, mapping):
@@ -141,6 +152,7 @@ class JSonDict(UserDict):
             self.data = _SyncedDict(self)
         else:
             self.data = _SyncedDict(None)
+        self.load()
 
     def load(self):
         try:
@@ -148,12 +160,7 @@ class JSonDict(UserDict):
             with open(self._filename, 'rb') as file:
                 data = json.loads(file.read().decode())
                 with self.data._suspend_sync():
-                    if self._synchronized:
-                        for k in data:
-                            self.data[k] = convert_to_synced_dict(data[k], self.data)
-                    else:
-                        for k in data:
-                            self.data[k] = convert_to_synced_dict(data[k], None)
+                    _update_synced_dict(self.data, data)
         except ValueError:
             logger.critical(
                 "Document file '{}' seems to be corrupted! Unable "
@@ -165,7 +172,7 @@ class JSonDict(UserDict):
             pass
 
     def _dump(self):
-        return json.dumps(convert_to_dict(self.data))
+        return json.dumps(_convert_to_dict(self.data))
 
     def _save(self):
         logger.debug("Storing to '{}'.".format(self._filename))
@@ -207,3 +214,6 @@ class JSonDict(UserDict):
 
     def __repr__(self):
         return super(JSonDict, self).__repr__()
+
+    def clear(self):
+        self.data.clear()

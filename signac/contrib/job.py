@@ -259,7 +259,6 @@ class Job(object):
                 raise
         else:
             if self._document is not None:
-                self._document.data.clear()
                 self._document = None
 
     def move(self, project):
