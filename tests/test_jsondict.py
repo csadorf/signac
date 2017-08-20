@@ -136,6 +136,19 @@ class JSonDictTest(BaseJSonDictTest):
         self.assertTrue(key in copy)
         self.assertEqual(copy[key], d)
 
+    def test_nested_dict(self):
+        jsd = self.get_json_dict()
+        jsd['a'] = 0
+        self.assertEqual(jsd['a'], 0)
+        jsd['a'] = 1
+        self.assertEqual(jsd['a'], 1)
+        jsd['a'] = dict(b=0)
+        self.assertEqual(jsd['a']['b'], 0)
+        jsd['a']['b'] = 1
+        self.assertEqual(jsd['a']['b'], 1)
+        del jsd['a']['b']
+        self.assertEqual(jsd['a'], {})
+
 
 class SynchronizedDictTest(JSonDictTest):
 
