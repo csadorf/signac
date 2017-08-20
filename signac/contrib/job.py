@@ -6,6 +6,7 @@ import errno
 import logging
 import shutil
 import copy
+import warnings
 from contextlib import contextmanager
 
 from ..common import six
@@ -18,6 +19,15 @@ from .utility import _mkdir_p
 from .errors import DestinationExistsError
 
 logger = logging.getLogger(__name__)
+
+
+class _JSonDictWarnOnWrite(JSonDict):
+
+    def save(self, *args, **kwargs):
+        warnings.warn(
+            "Use open_document() for writing to the Job.document.",
+            PendingDeprecationWarning)
+        return super(_JSonDictWarnOnWrite, self).save(*args, **kwargs)
 
 
 class Job(object):
@@ -177,12 +187,9 @@ class Job(object):
 
         :return: The job document handle.
         :rtype: :class:`~.JSonDict`"""
-        if self._document is None:
-            self._create_directory()
-            fn = os.path.join(self.workspace(), self.FN_DOCUMENT)
-            self._document = JSonDict(
-                fn, synchronized=True, write_concern=True)
-        return self._document
+        self._create_directory()
+        fn = os.path.join(self.workspace(), self.FN_DOCUMENT)
+        return _JSonDictWarnOnWrite(fn, synchronized=True, write_concern=True)
 
     @contextmanager
     def open_document(self):
