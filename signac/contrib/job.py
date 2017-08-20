@@ -6,6 +6,7 @@ import errno
 import logging
 import shutil
 import copy
+from contextlib import contextmanager
 
 from ..common import six
 from ..core.json import json
@@ -182,6 +183,16 @@ class Job(object):
             self._document = JSonDict(
                 fn, synchronized=True, write_concern=True)
         return self._document
+
+    @contextmanager
+    def open_document(self):
+        self._create_directory()
+        fn = os.path.join(self.workspace(), self.FN_DOCUMENT)
+        try:
+            doc = JSonDict(fn, synchronized=False, write_concern=True)
+            yield doc
+        finally:
+            doc.save()
 
     def _create_directory(self, overwrite=False):
         "Create the workspace directory and write the manifest file."
