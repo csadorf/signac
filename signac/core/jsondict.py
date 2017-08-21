@@ -6,6 +6,7 @@ import os
 import errno
 import logging
 import uuid
+import time
 from contextlib import contextmanager
 
 from .json import json
@@ -144,10 +145,12 @@ class _SyncedDict(UserDict):
 
 class JSonDict(UserDict):
 
-    def __init__(self, filename, synchronized=False, write_concern=False):
+    def __init__(self, filename, synchronized=False, write_concern=False,
+                 ignore_timestamp=True):
         self._filename = filename
         self._write_concern = write_concern
         self._synchronized = synchronized
+        self._last_load = None if ignore_timestamp else -1
         if synchronized:
             self.data = _SyncedDict(self)
         else:
@@ -155,6 +158,14 @@ class JSonDict(UserDict):
         self.load()
 
     def load(self):
+        if self._last_load is not None:
+            try:
+                if self._last_load > os.path.getmtime(self._filename):
+                    logger.debug("Skip load due to timestamp.")
+                    return
+            except FileNotFoundError:
+                pass
+            self._last_load = time.time()
         try:
             logger.debug("Loading from file '{}'.".format(self._filename))
             with open(self._filename, 'rb') as file:
@@ -193,6 +204,8 @@ class JSonDict(UserDict):
             os.replace(fn_tmp, self._filename)
 
     def save(self):
+        if self._last_load is not None:
+            self._last_load = -1
         with self.data._suspend_sync():
             if self._write_concern:
                 return self._save_with_concern()
