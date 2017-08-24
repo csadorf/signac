@@ -170,6 +170,12 @@ class Job(object):
     def sp(self, new_sp):
         self._reset_sp(new_sp)
 
+    def _update_doc(self, new_doc):
+        self._create_directory()
+        fn = os.path.join(self.workspace(), self.FN_DOCUMENT)
+        with open(fn, 'wb') as file:    # requires tmp rename idiom
+            file.write(json.dumps(new_doc).encode())
+
     @property
     def document(self):
         """The document associated with this job.
@@ -179,8 +185,11 @@ class Job(object):
         if self._document is None:
             self._create_directory()
             fn = os.path.join(self.workspace(), self.FN_DOCUMENT)
-            self._document = JSonDict(
-                fn, synchronized=True, write_concern=True)
+            try:
+                with open(fn, 'rb') as file:
+                    self._document = AttrDict(json.loads(file.read().decode()), self._update_doc)
+            except FileNotFoundError:
+                self._document = AttrDict(dict(), self._update_doc)
         return self._document
 
     def _create_directory(self, overwrite=False):
@@ -259,7 +268,7 @@ class Job(object):
                 raise
         else:
             if self._document is not None:
-                self._document.data.clear()
+                self._document.clear()
                 self._document = None
 
     def move(self, project):
