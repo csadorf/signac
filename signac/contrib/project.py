@@ -549,7 +549,7 @@ class Project(object):
                 raise ValueError("Insufficient index for selected data space.")
 
         jsi = self.build_job_statepoint_index(exclude_const=True, index=index)
-        sp_index = dict(jsi)
+        sp_index = collections.OrderedDict(jsi)
         tmp = collections.defaultdict(list)
         for key, values in sp_index.items():
             for value, group in values.items():
