@@ -6,6 +6,8 @@ import os
 import uuid
 import warnings
 import logging
+import subprocess
+import re
 
 import signac
 from signac.common import six
@@ -280,6 +282,38 @@ class ProjectTest(BaseProjectTest):
         dst = set(map(lambda l: os.path.realpath(os.path.join(view_prefix, l, 'job')), all_links))
         src = set(map(lambda j: os.path.realpath(j.workspace()), self.project.find_jobs()))
         self.assertEqual(src, dst)
+
+        # Test order of linked view by testing
+        num_test_views = 10
+        view_prefixes = [os.path.join(self._tmp_pr, 'view' + str(num)) for num in range(num_test_views)]
+
+        import numpy as np
+        for a in range(10):
+            for b in np.linspace(3, 7, 5):
+                for c in ["foo", "bar", "baz"]:
+                    sp = {'a': a, 'b': b, 'c': c}
+                    self.project.open_job(sp).init()
+
+        self.maxDiff = None
+        ls_output = None
+        for pre in view_prefixes:
+            # Various attempts at ways to force reordering of dictionaries
+            from imp import reload
+            reload(signac)
+            import random
+            random.seed(hash(pre))
+            import time
+            time.sleep(1)
+
+            # Creating views
+            self.project.create_linked_view(prefix=pre)
+            if not ls_output:
+                ls_output = subprocess.check_output(["ls", "-lR", pre]).decode('utf-8')
+                #print(subprocess.check_output(["ls", pre]).decode('utf-8'))
+                pre_init = pre
+            else:
+                #print(re.sub(pre, pre_init, subprocess.check_output(["ls", pre]).decode('utf-8')))
+                self.assertEqual(re.sub(pre, pre_init, subprocess.check_output(["ls", "-lR", pre]).decode('utf-8')), ls_output)
 
     def test_find_job_documents(self):
         statepoints = [{'a': i} for i in range(5)]
