@@ -283,37 +283,77 @@ class ProjectTest(BaseProjectTest):
         src = set(map(lambda j: os.path.realpath(j.workspace()), self.project.find_jobs()))
         self.assertEqual(src, dst)
 
-        # Test order of linked view by testing
-        num_test_views = 10
-        view_prefixes = [os.path.join(self._tmp_pr, 'view' + str(num)) for num in range(num_test_views)]
+        """ Test that ordering of views is deterministic """
+        def clean():
+            for job in self.project.find_jobs():
+                job.remove()
 
-        import numpy as np
-        for a in range(10):
-            for b in np.linspace(3, 7, 5):
-                for c in ["foo", "bar", "baz"]:
+        ###################################################
+        # Case 1: Homogenous schema, non-nested statepoints
+        ###################################################
+        a_vals = range(10)
+        b_vals = range(3, 8)
+        c_vals = ["foo", "bar", "baz"]
+        for a in a_vals:
+            for b in b_vals:
+                for c in c_vals:
                     sp = {'a': a, 'b': b, 'c': c}
                     self.project.open_job(sp).init()
+        self.project.create_linked_view(prefix=view_prefix)
 
-        self.maxDiff = None
-        ls_output = None
-        for pre in view_prefixes:
-            # Various attempts at ways to force reordering of dictionaries
-            from imp import reload
-            reload(signac)
-            import random
-            random.seed(hash(pre))
-            import time
-            time.sleep(1)
+        # Loop over levels and test each of them
+        #print(view_prefix)
+        c_dirs = os.listdir(view_prefix)
+        self.assertEqual(sorted(['_'.join(['c', x]) for x in c_vals]), sorted(c_dirs))
+        for c in c_dirs:
+            c_view_prefix = os.path.join(view_prefix, c)
+            b_dirs = os.listdir(c_view_prefix)
+            self.assertEqual(sorted(['_'.join(['b', str(x)]) for x in b_vals]), sorted(b_dirs))
+            for b in b_dirs:
+                b_view_prefix = os.path.join(c_view_prefix, b)
+                a_dirs = os.listdir(b_view_prefix)
+                self.assertEqual(sorted(['_'.join(['a', str(x)]) for x in a_vals]), sorted(a_dirs))
+        clean()
 
-            # Creating views
-            self.project.create_linked_view(prefix=pre)
-            if not ls_output:
-                ls_output = subprocess.check_output(["ls", "-lR", pre]).decode('utf-8')
-                #print(subprocess.check_output(["ls", pre]).decode('utf-8'))
-                pre_init = pre
-            else:
-                #print(re.sub(pre, pre_init, subprocess.check_output(["ls", pre]).decode('utf-8')))
-                self.assertEqual(re.sub(pre, pre_init, subprocess.check_output(["ls", "-lR", pre]).decode('utf-8')), ls_output)
+        ###################################################
+        # Case 2: Homogenous schema, nested statepoints
+        ###################################################
+        return
+
+        # Loop over levels and test each of them
+        #print(view_prefix)
+        c_dirs = os.listdir(view_prefix)
+        self.assertEqual(sorted(['_'.join(['c', x]) for x in c_vals]), sorted(c_dirs))
+        for c in c_dirs:
+            c_view_prefix = os.path.join(view_prefix, c)
+            b_dirs = os.listdir(c_view_prefix)
+            self.assertEqual(sorted(['_'.join(['b', str(x)]) for x in b_vals]), sorted(b_dirs))
+            for b in b_dirs:
+                b_view_prefix = os.path.join(c_view_prefix, b)
+                a_dirs = os.listdir(b_view_prefix)
+                self.assertEqual(sorted(['_'.join(['a', str(x)]) for x in a_vals]), sorted(a_dirs))
+        clean()
+
+        ###################################################
+        # Case 3: Heterogenous schema, non-nested statepoints
+        ###################################################
+        for a in range(10):
+            for b in range(3, 8):
+                sp = {'a': a, 'b': b}
+                self.project.open_job(sp).init()
+            for c in ["foo", "bar", "baz"]:
+                sp = {'a': a, 'c': c}
+                self.project.open_job(sp).init()
+        self.project.create_linked_view(prefix=view_prefix)
+        self.assertEqual(re.sub(pre, pre_init, subprocess.check_output(["ls", "-lR", pre]).decode('utf-8')), ls_output)
+        clean()
+
+        ###################################################
+        # Case 4: Heterogenous schema, nested statepoints
+        ###################################################
+        self.project.create_linked_view(prefix=view_prefix)
+        self.assertEqual(re.sub(pre, pre_init, subprocess.check_output(["ls", "-lR", pre]).decode('utf-8')), ls_output)
+        clean()
 
     def test_find_job_documents(self):
         statepoints = [{'a': i} for i in range(5)]
