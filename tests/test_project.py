@@ -287,6 +287,7 @@ class ProjectTest(BaseProjectTest):
         def clean():
             for job in self.project.find_jobs():
                 job.remove()
+            self.project.create_linked_view(prefix=view_prefix)
 
         ###################################################
         # Case 1: Homogenous schema, non-nested statepoints
@@ -302,7 +303,6 @@ class ProjectTest(BaseProjectTest):
         self.project.create_linked_view(prefix=view_prefix)
 
         # Loop over levels and test each of them
-        #print(view_prefix)
         c_dirs = os.listdir(view_prefix)
         self.assertEqual(sorted(['_'.join(['c', x]) for x in c_vals]), sorted(c_dirs))
         for c in c_dirs:
@@ -318,6 +318,17 @@ class ProjectTest(BaseProjectTest):
         ###################################################
         # Case 2: Homogenous schema, nested statepoints
         ###################################################
+        """
+        a_vals = range(2)
+        b_vals = range(3, 8)
+        c_vals = ["foo", "bar", "baz"]
+        for a in a_vals:
+            for b in b_vals:
+                for c in c_vals:
+                    sp = {'a': {'b': b, 'c': c}}
+                    self.project.open_job(sp).init()
+        self.project.create_linked_view(prefix=view_prefix)
+        print(subprocess.check_output(["ls", "-lR", view_prefix]).decode('utf-8'))
         return
 
         # Loop over levels and test each of them
@@ -333,20 +344,39 @@ class ProjectTest(BaseProjectTest):
                 a_dirs = os.listdir(b_view_prefix)
                 self.assertEqual(sorted(['_'.join(['a', str(x)]) for x in a_vals]), sorted(a_dirs))
         clean()
+        """
 
         ###################################################
         # Case 3: Heterogenous schema, non-nested statepoints
         ###################################################
-        for a in range(10):
-            for b in range(3, 8):
+        a_vals = range(5)
+        b_vals = range(3, 13)
+        c_vals = ["foo", "bar", "baz"]
+        for a in a_vals:
+            for b in b_vals:
                 sp = {'a': a, 'b': b}
                 self.project.open_job(sp).init()
-            for c in ["foo", "bar", "baz"]:
+            for c in c_vals:
                 sp = {'a': a, 'c': c}
                 self.project.open_job(sp).init()
         self.project.create_linked_view(prefix=view_prefix)
-        self.assertEqual(re.sub(pre, pre_init, subprocess.check_output(["ls", "-lR", pre]).decode('utf-8')), ls_output)
-        clean()
+
+        # Loop over levels and test each of them
+        root_dirs = os.listdir(view_prefix)
+        expected_a_dirs = ['_'.join(['a', str(x)]) for x in a_vals]
+        expected_b_dirs = ['_'.join(['b', str(x)]) for x in b_vals]
+        expected_c_dirs = ['_'.join(['c', x]) for x in c_vals]
+        self.assertEqual(sorted(expected_a_dirs + expected_c_dirs), sorted(root_dirs))
+        for rt in root_dirs:
+            sub_view_prefix = os.path.join(view_prefix, rt)
+            subdirs = os.listdir(sub_view_prefix)
+            if rt in expected_a_dirs:
+                self.assertEqual(sorted(expected_b_dirs), sorted(subdirs))
+            elif rt in expected_c_dirs:
+                self.assertEqual(sorted(expected_a_dirs), sorted(subdirs))
+            else:
+                raise RuntimeError("Unexpected top-level directory.")
+        return
 
         ###################################################
         # Case 4: Heterogenous schema, nested statepoints
