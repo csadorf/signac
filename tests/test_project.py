@@ -336,7 +336,7 @@ class ProjectTest(BaseProjectTest):
                     sorted(['_'.join(['d', 'b', str(x)]) for x in b_vals]),
                     sorted(d_b_dirs))
 
-    def test_create_linked_view_heterogeneous_schema_flat(self):
+    def test_create_linked_view_heterogeneous_disjoint_schema_flat(self):
         view_prefix = os.path.join(self._tmp_pr, 'view')
         a_vals = range(5)
         b_vals = range(3, 13)
@@ -366,7 +366,7 @@ class ProjectTest(BaseProjectTest):
             else:
                 raise RuntimeError("Unexpected top-level directory.")
 
-    def test_create_linked_view_heterogeneous_schema_nested(self):
+    def test_create_linked_view_heterogeneous_disjoint_schema_nested(self):
         view_prefix = os.path.join(self._tmp_pr, 'view')
         a_vals = range(2)
         b_vals = range(3, 8)
@@ -389,6 +389,66 @@ class ProjectTest(BaseProjectTest):
             expected_d_b_dirs = ['_'.join(['d', 'b', str(x)]) for x in b_vals]
             expected_d_c_dirs = ['_'.join(['d', 'c', str(x)]) for x in c_vals]
             self.assertEqual(sorted(expected_d_b_dirs + expected_d_c_dirs), sorted(d_dirs))
+
+    def test_create_linked_view_heterogeneous_fizz_buzz_schema_flat(self):
+        view_prefix = os.path.join(self._tmp_pr, 'view')
+        a_vals = range(5)
+        b_vals = range(5)
+        c_vals = ["foo", "bar", "baz"]
+        for a in a_vals:
+            for b in b_vals:
+                for c in c_vals:
+                    if a % 3 == 0:
+                        sp = {'a': a, 'b': b}
+                    else:
+                        sp = {'a': a, 'b': b, 'c': c}
+                    self.project.open_job(sp).init()
+        self.project.create_linked_view(prefix=view_prefix)
+
+        # Loop over levels and test each of them
+        root_dirs = os.listdir(view_prefix)
+        expected_b_dirs = ['_'.join(['b', str(x)]) for x in b_vals]
+        expected_a_dirs = ['a_0', 'a_3']
+        expected_c_dirs = ['c_bar', 'c_baz', 'c_foo']
+        self.assertEqual(sorted(expected_a_dirs + expected_c_dirs), sorted(root_dirs))
+        for rt in root_dirs:
+            sub_view_prefix = os.path.join(view_prefix, rt)
+            subdirs = os.listdir(sub_view_prefix)
+            if rt in expected_a_dirs:
+                self.assertEqual(sorted(expected_b_dirs), sorted(subdirs))
+            elif rt in expected_c_dirs:
+                self.assertEqual(['a_1', 'a_2', 'a_4'], sorted(subdirs))
+            else:
+                raise RuntimeError("Unexpected top-level directory.")
+
+    def test_create_linked_view_heterogeneous_fizz_buzz_schema_nested(self):
+        view_prefix = os.path.join(self._tmp_pr, 'view')
+        a_vals = range(5)
+        b_vals = range(10)
+        c_vals = ["foo", "bar", "baz"]
+        for a in a_vals:
+            for b in b_vals:
+                if a % 3 == 0:
+                    sp = {'a': a, 'b': {'c': b}}
+                else:
+                    sp = {'a': a, 'b': b}
+                self.project.open_job(sp).init()
+        self.project.create_linked_view(prefix=view_prefix)
+
+        # Loop over levels and test each of them
+        root_dirs = os.listdir(view_prefix)
+        expected_a_dirs = ['_'.join(['a', str(x)]) for x in a_vals]
+        expected_b_dirs = ['_'.join(['b', str(x)]) for x in b_vals]
+        expected_nested_b_dirs = ['_'.join(['b', 'c', str(x)]) for x in b_vals]
+        self.assertEqual(sorted(root_dirs), sorted(expected_a_dirs))
+        for rt in root_dirs:
+            sub_view_prefix = os.path.join(view_prefix, rt)
+            subdirs = os.listdir(sub_view_prefix)
+            a, x = rt.split('_')
+            if int(x) % 3 == 0:
+                self.assertEqual(sorted(subdirs), expected_nested_b_dirs)
+            else:
+                self.assertEqual(sorted(subdirs), expected_b_dirs)
 
     def test_find_job_documents(self):
         statepoints = [{'a': i} for i in range(5)]
