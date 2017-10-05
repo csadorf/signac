@@ -6,8 +6,6 @@ import os
 import uuid
 import warnings
 import logging
-import subprocess
-import re
 
 import signac
 from signac.common import six
@@ -226,7 +224,8 @@ class ProjectTest(BaseProjectTest):
             self.project.open_job(id='abc')
 
     def test_create_linked_view(self):
-        def clean(filter = None):
+
+        def clean(filter=None):
             """Helper function for wiping out views"""
             for job in self.project.find_jobs(filter):
                 job.remove()
@@ -285,11 +284,8 @@ class ProjectTest(BaseProjectTest):
         src = set(map(lambda j: os.path.realpath(j.workspace()), self.project.find_jobs()))
         self.assertEqual(src, dst)
 
-        """ Test that ordering of views is deterministic """
-        ###################################################
-        # Case 1: Homogenous schema, non-nested statepoints
-        ###################################################
-        clean()
+    def test_create_linked_view_homogeneous_schema_flat(self):
+        view_prefix = os.path.join(self._tmp_pr, 'view')
         a_vals = range(10)
         b_vals = range(3, 8)
         c_vals = ["foo", "bar", "baz"]
@@ -312,10 +308,8 @@ class ProjectTest(BaseProjectTest):
                 a_dirs = os.listdir(b_view_prefix)
                 self.assertEqual(sorted(['_'.join(['a', str(x)]) for x in a_vals]), sorted(a_dirs))
 
-        ###################################################
-        # Case 2: Homogenous schema, nested statepoints
-        ###################################################
-        clean()
+    def test_create_linked_view_homogeneous_schema_nested(self):
+        view_prefix = os.path.join(self._tmp_pr, 'view')
         a_vals = range(2)
         b_vals = range(3, 8)
         c_vals = ["foo", "bar", "baz"]
@@ -332,16 +326,18 @@ class ProjectTest(BaseProjectTest):
         for a in a_dirs:
             a_view_prefix = os.path.join(view_prefix, a)
             d_c_dirs = os.listdir(a_view_prefix)
-            self.assertEqual(sorted(['_'.join(['d', 'c', str(x)]) for x in c_vals]), sorted(d_c_dirs))
+            self.assertEqual(
+                sorted(['_'.join(['d', 'c', str(x)]) for x in c_vals]),
+                sorted(d_c_dirs))
             for d_c in d_c_dirs:
                 d_c_view_prefix = os.path.join(a_view_prefix, d_c)
                 d_b_dirs = os.listdir(d_c_view_prefix)
-                self.assertEqual(sorted(['_'.join(['d', 'b', str(x)]) for x in b_vals]), sorted(d_b_dirs))
+                self.assertEqual(
+                    sorted(['_'.join(['d', 'b', str(x)]) for x in b_vals]),
+                    sorted(d_b_dirs))
 
-        ###################################################
-        # Case 3: Heterogenous schema, non-nested statepoints
-        ###################################################
-        clean()
+    def test_create_linked_view_heterogeneous_schema_flat(self):
+        view_prefix = os.path.join(self._tmp_pr, 'view')
         a_vals = range(5)
         b_vals = range(3, 13)
         c_vals = ["foo", "bar", "baz"]
@@ -370,10 +366,8 @@ class ProjectTest(BaseProjectTest):
             else:
                 raise RuntimeError("Unexpected top-level directory.")
 
-        ###################################################
-        # Case 4: Heterogenous schema, nested statepoints
-        ###################################################
-        clean()
+    def test_create_linked_view_heterogeneous_schema_nested(self):
+        view_prefix = os.path.join(self._tmp_pr, 'view')
         a_vals = range(2)
         b_vals = range(3, 8)
         c_vals = ["foo", "bar", "baz"]
