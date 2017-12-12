@@ -67,8 +67,8 @@ class JobSearchIndex(object):
     :param index: A document index.
     """
 
-    def __init__(self, index):
-        self._collection = Collection(index)
+    def __init__(self, index, _trust=False):
+        self._collection = Collection(index, _trust=_trust)
 
     def __len__(self):
         return len(self._collection)
@@ -314,7 +314,7 @@ class Project(object):
                     id = matches[0]
                 elif len(matches) > 1:
                     raise LookupError(id)
-            job = self.Job(project=self, statepoint=self.get_statepoint(id))
+            job = self.Job(project=self, statepoint=self.get_statepoint(id), _trust=True)
         if job.get_id() not in self._sp_cache:
             self._register(job)
         return job
@@ -356,7 +356,7 @@ class Project(object):
         """
         return job.get_id() in self.find_job_ids()
 
-    def build_job_search_index(self, index):
+    def build_job_search_index(self, index, _trust=False):
         """Build a job search index.
 
         :param index: A document index.
@@ -364,7 +364,7 @@ class Project(object):
         :returns: A job search index based on the provided index.
         :rtype: :class:`~.JobSearchIndex`
         """
-        return JobSearchIndex(index=index)
+        return JobSearchIndex(index=index, _trust=_trust)
 
     def build_job_statepoint_index(self, exclude_const=False, index=None):
         """Build a statepoint index to identify jobs with specific parameters.
@@ -409,7 +409,7 @@ class Project(object):
         """
         if index is None:
             index = self.index(include_job_document=False)
-        collection = Collection(index)
+        collection = Collection(index, _trust=True)
         for doc in collection.find():
             for key, _ in _traverse_filter(doc):
                 if key == '_id' or key.split('.')[0] != 'statepoint':
@@ -476,7 +476,7 @@ class Project(object):
                 index = self._sp_index()
             else:
                 index = self.index(include_job_document=True)
-        search_index = self.build_job_search_index(index)
+        search_index = self.build_job_search_index(index, _trust=True)
         return search_index.find_job_ids(filter=filter, doc_filter=doc_filter)
 
     def find_jobs(self, filter=None, doc_filter=None, index=None):
@@ -882,7 +882,7 @@ class Project(object):
             In case that a job with the same id is already
             initialized within this project.
         """
-        dst = self.open_job(job._statepoint)
+        dst = self.open_job(job._statepoint, _trust=True)
         try:
             copytree(job.workspace(), dst.workspace())
         except OSError as error:

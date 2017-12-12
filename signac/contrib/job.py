@@ -50,11 +50,14 @@ class Job(object):
     FN_DOCUMENT = 'signac_job_document.json'
     "The job's document filename."
 
-    def __init__(self, project, statepoint):
+    def __init__(self, project, statepoint, _trust=False):
         self._project = project
-        self._sp = None
-        self._statepoint = json.loads(json.dumps(statepoint))
-        self._id = calc_id(self.statepoint())
+        if _trust:
+            self._statepoint = dict(statepoint)
+        else:
+            self._statepoint = json.loads(json.dumps(statepoint))
+        self._id = calc_id(self._statepoint)
+        self._sp = SyncedAttrDict(self._statepoint, parent=_sp_save_hook(self))
         self._wd = os.path.join(project.workspace(), self._id)
         self._fn_doc = os.path.join(self._wd, self.FN_DOCUMENT)
         self._document = None
