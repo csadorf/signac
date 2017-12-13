@@ -141,6 +141,9 @@ class Project(object):
         self._document = None
         self._sp_cache_misses = 0
         self._sp_cache_hits = 0
+        self._sp_cache_warned = False
+        self._sp_cache_miss_warning_threshold = self._config.get(
+            'statepoint_cache_miss_warning_threshold', 500)
 
     def __str__(self):
         "Returns the project's id."
@@ -727,6 +730,13 @@ class Project(object):
                 return self._sp_cache[jobid]
             else:
                 self._sp_cache_misses += 1
+                if not self._sp_cache_warned and\
+                        self._sp_cache_misses > self._sp_cache_miss_warning_threshold:
+                    logger.warn(
+                        "Many state point cache misses, consider to update the "
+                        "project cache. See help(signac.Project.udpate_cache) for "
+                        "more information.")
+                    self._sp_cache_warned = True
                 sp = self._get_statepoint_from_workspace(jobid)
         except KeyError as error:
             try:
@@ -1048,7 +1058,7 @@ class Project(object):
                 cache = json.loads(cachefile.read().decode())
             self._sp_cache.update(cache)
         except FileNotFoundError:
-            warnings.warn("No cache file.")
+            logger.debug("No cache file found.")
         else:
             stop = time.time()
             logger.debug("Read cache in {:.2f} seconds.".format(stop - start))
