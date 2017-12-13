@@ -1059,7 +1059,7 @@ class Project(object):
 
     def update_cache(self):
         "Update the persistent state point cache (experimental)."
-        logger.debug('Update cache...')
+        logger.info('Update cache...')
         start = time.time()
         cache = self._read_cache()
         self._update_in_memory_cache()
@@ -1067,9 +1067,10 @@ class Project(object):
             with gzip.open(self.fn(self.FN_CACHE), 'wb') as cachefile:
                 cachefile.write(json.dumps(self._sp_cache).encode())
             delta = time.time() - start
-            logger.debug("Updated cache in {:.3f} sconds.".format(delta))
+            logger.info("Updated cache in {:.3f} sconds.".format(delta))
+            return len(self._sp_cache)
         else:
-            logger.debug("Cache is up to date.")
+            logger.info("Cache is up to date.")
 
     def _read_cache(self):
         "Read the persistent state point cache (if available)."
