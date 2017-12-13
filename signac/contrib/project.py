@@ -36,9 +36,9 @@ if six.PY2:
 else:
     from collections.abc import Mapping
 
-
 logger = logging.getLogger(__name__)
 
+JOB_ID_REGEX = re.compile('[a-f0-9]{32}')
 
 ACCESS_MODULE_MINIMAL = """import signac
 
@@ -133,12 +133,16 @@ class Project(object):
             config = load_config()
         self._config = config
 
+        # Setup paths
+        self._rd = self._config['project_dir']
+        wd = os.path.expandvars(self._config.get('workspace_dir', 'workspace'))
+        if os.path.isabs(wd):
+            self._wd = wd
+        else:
+            self._wd = os.path.join(self._rd, wd)
+
         # Ensure that the project id is configured.
         self.get_id()
-
-        # Normalize workspace path (if not already absolute)
-        if not os.path.isabs(self._wd):
-            self._wd = os.path.join(self.root_directory(), self._wd)
 
         # Prepare project document
         self._fn_doc = os.path.join(self.root_directory(), self.FN_DOCUMENT)
@@ -171,19 +175,6 @@ class Project(object):
     def config(self):
         "The project's configuration."
         return self._config
-
-    @property
-    def _rd(self):
-        "The project root directory."
-        return self._config['project_dir']
-
-    @property
-    def _wd(self):
-        wd = os.path.expandvars(self._config.get('workspace_dir', 'workspace'))
-        if os.path.isabs(wd):
-            return wd
-        else:
-            return os.path.join(self._rd, wd)
 
     def root_directory(self):
         "Returns the project's root directory."
@@ -337,10 +328,9 @@ class Project(object):
         return job
 
     def _job_dirs(self):
-        m = re.compile('[a-f0-9]{32}')
         try:
             for d in os.listdir(self._wd):
-                if m.match(d):
+                if JOB_ID_REGEX.match(d):
                     yield d
         except OSError as error:
             if error.errno == errno.ENOENT:
@@ -1046,6 +1036,8 @@ class Project(object):
 
     def _update_in_memory_cache(self):
         "Update the in-memory state point cache to reflect the workspace."
+        logger.debug("Updating in-memory cache...")
+        start = time.time()
         job_ids = set(self._job_dirs())
         cached_ids = set(self._sp_cache)
         to_add = job_ids.difference(cached_ids)
@@ -1055,7 +1047,11 @@ class Project(object):
                 self._sp_cache[_id] = self._get_statepoint_from_workspace(_id)
             for _id in to_remove:
                 del self._sp_cache[_id]
+            delta = time.time() - start
+            logger.debug("Updated in-memory cache in {:.3f} seconds.".format(delta))
             return to_add, to_remove
+        else:
+            logger.debug("In-memory cache is up to date.".format(delta))
 
     def update_cache(self):
         "Update the persistent state point cache (experimental)."
