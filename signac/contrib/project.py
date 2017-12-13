@@ -132,15 +132,22 @@ class Project(object):
         if config is None:
             config = load_config()
         self._config = config
-        self._sp_cache = dict()
-        self._index_cache = dict()
+
+        # Ensure that the project id is configured.
         self.get_id()
+
+        # Normalize workspace path (if not already absolute)
         if not os.path.isabs(self._wd):
             self._wd = os.path.join(self.root_directory(), self._wd)
+
+        # Prepare project document
         self._fn_doc = os.path.join(self.root_directory(), self.FN_DOCUMENT)
         self._document = None
+
+        # Internal caches
+        self._index_cache = dict()
+        self._sp_cache = dict()
         self._sp_cache_misses = 0
-        self._sp_cache_hits = 0
         self._sp_cache_warned = False
         self._sp_cache_miss_warning_threshold = self._config.get(
             'statepoint_cache_miss_warning_threshold', 500)
@@ -726,16 +733,14 @@ class Project(object):
             self._read_cache()
         try:
             if jobid in self._sp_cache:
-                self._sp_cache_hits += 1
                 return self._sp_cache[jobid]
             else:
                 self._sp_cache_misses += 1
                 if not self._sp_cache_warned and\
                         self._sp_cache_misses > self._sp_cache_miss_warning_threshold:
-                    logger.warn(
-                        "Many state point cache misses, consider to update the "
-                        "project cache. See help(signac.Project.udpate_cache) for "
-                        "more information.")
+                    logger.debug(
+                        "High number of state point cache misses. Consider "
+                        "to update cache with the Project.update_cache() method.")
                     self._sp_cache_warned = True
                 sp = self._get_statepoint_from_workspace(jobid)
         except KeyError as error:
@@ -1039,29 +1044,49 @@ class Project(object):
                             raise
             yield doc
 
-    def update_cache(self):
-        start = time.time()
-        logger.debug('Build cache...')
+    def _update_in_memory_cache(self):
+        "Update the in-memory state point cache to reflect the workspace."
         job_ids = set(self._job_dirs())
-        for _id in job_ids.difference(self._sp_cache):
-            self._sp_cache[_id] = self._get_statepoint_from_workspace(_id)
-        with gzip.open(self.fn(self.FN_CACHE), 'wb') as cachefile:
-            cachefile.write(json.dumps(self._sp_cache).encode())
-        stop = time.time()
-        logger.debug("Built cache in {:.2f} sconds.".format(stop - start))
+        cached_ids = set(self._sp_cache)
+        to_add = job_ids.difference(cached_ids)
+        to_remove = cached_ids.difference(job_ids)
+        if to_add or to_remove:
+            for _id in to_add:
+                self._sp_cache[_id] = self._get_statepoint_from_workspace(_id)
+            for _id in to_remove:
+                del self._sp_cache[_id]
+            return to_add, to_remove
+
+    def update_cache(self):
+        "Update the persistent state point cache (experimental)."
+        logger.debug('Update cache...')
+        start = time.time()
+        cache = self._read_cache()
+        self._update_in_memory_cache()
+        if cache is None or set(cache) != set(self._sp_cache):
+            with gzip.open(self.fn(self.FN_CACHE), 'wb') as cachefile:
+                cachefile.write(json.dumps(self._sp_cache).encode())
+            delta = time.time() - start
+            logger.debug("Updated cache in {:.3f} sconds.".format(delta))
+        else:
+            logger.debug("Cache is up to date.")
 
     def _read_cache(self):
+        "Read the persistent state point cache (if available)."
         logger.debug("Reading cache...")
         start = time.time()
         try:
             with gzip.open(self.fn(self.FN_CACHE), 'rb') as cachefile:
                 cache = json.loads(cachefile.read().decode())
             self._sp_cache.update(cache)
-        except FileNotFoundError:
+        except IOError as error:
+            if not error.errno == errno.ENOENT:
+                raise
             logger.debug("No cache file found.")
         else:
-            stop = time.time()
-            logger.debug("Read cache in {:.2f} seconds.".format(stop - start))
+            delta = time.time() - start
+            logger.debug("Read cache in {:.3f} seconds.".format(delta))
+            return cache
 
     def index(self, formats=None, depth=0,
               skip_errors=False, include_job_document=True):
