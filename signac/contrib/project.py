@@ -10,6 +10,8 @@ import warnings
 import errno
 import collections
 import uuid
+import time
+import gzip
 from itertools import chain, groupby
 
 from .. import syncutil
@@ -123,6 +125,9 @@ class Project(object):
     FN_STATEPOINTS = 'signac_statepoints.json'
     "The default filename to read from and write statepoints to."
 
+    FN_CACHE = '.signac_sp_cache.json.gz'
+    "The default filename for the state point cache file."
+
     def __init__(self, config=None):
         if config is None:
             config = load_config()
@@ -134,6 +139,8 @@ class Project(object):
             self._wd = os.path.join(self.root_directory(), self._wd)
         self._fn_doc = os.path.join(self.root_directory(), self.FN_DOCUMENT)
         self._document = None
+        self._sp_cache_misses = 0
+        self._sp_cache_hits = 0
 
     def __str__(self):
         "Returns the project's id."
@@ -654,14 +661,18 @@ class Project(object):
             fn = self.fn(self.FN_STATEPOINTS)
         try:
             tmp = self.read_statepoints(fn=fn)
-        # except FileNotFoundError:
         except IOError as error:
             if not error.errno == errno.ENOENT:
                 raise
             tmp = dict()
         if statepoints is None:
-            statepoints = self.find_statepoints()
-        tmp.update(self.dump_statepoints(statepoints))
+            job_ids = set(self._job_dirs())
+            _cache = {_id: self.get_statepoint(_id) for _id in job_ids}
+        else:
+            _cache = {calc_id(sp): sp for sp in statepoints}
+
+        tmp.update(_cache)
+        logger.debug("Writing state points file with {} entries.".format(len(tmp)))
         with open(fn, 'w') as file:
             file.write(json.dumps(tmp, indent=indent))
 
@@ -708,10 +719,14 @@ class Project(object):
             If the state point manifest file corresponding to jobid is
             inaccessible or corrupted.
         """
+        if not self._sp_cache and getattr(self, '_use_central_cache', True):
+            self._read_cache()
         try:
             if jobid in self._sp_cache:
+                self._sp_cache_hits += 1
                 return self._sp_cache[jobid]
             else:
+                self._sp_cache_misses += 1
                 sp = self._get_statepoint_from_workspace(jobid)
         except KeyError as error:
             try:
@@ -1013,6 +1028,30 @@ class Project(object):
                         if error.errno != errno.ENOENT:
                             raise
             yield doc
+
+    def update_cache(self):
+        start = time.time()
+        logger.debug('Build cache...')
+        job_ids = set(self._job_dirs())
+        for _id in job_ids.difference(self._sp_cache):
+            self._sp_cache[_id] = self._get_statepoint_from_workspace(_id)
+        with gzip.open(self.fn(self.FN_CACHE), 'wb') as cachefile:
+            cachefile.write(json.dumps(self._sp_cache).encode())
+        stop = time.time()
+        logger.debug("Built cache in {:.2f} sconds.".format(stop - start))
+
+    def _read_cache(self):
+        logger.debug("Reading cache...")
+        start = time.time()
+        try:
+            with gzip.open(self.fn(self.FN_CACHE), 'rb') as cachefile:
+                cache = json.loads(cachefile.read().decode())
+            self._sp_cache.update(cache)
+        except FileNotFoundError:
+            warnings.warn("No cache file.")
+        else:
+            stop = time.time()
+            logger.debug("Read cache in {:.2f} seconds.".format(stop - start))
 
     def index(self, formats=None, depth=0,
               skip_errors=False, include_job_document=True):
