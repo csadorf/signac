@@ -1059,6 +1059,10 @@ class Project(object):
 
     def update_cache(self):
         "Update the persistent state point cache (experimental)."
+        warnings.warn(
+            "The Project.update_cache() method is experimental and "
+            "might be removed in future releases.",
+            FutureWarning)
         logger.info('Update cache...')
         start = time.time()
         cache = self._read_cache()
