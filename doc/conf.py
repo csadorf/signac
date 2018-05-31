@@ -12,6 +12,16 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
+## BEGIN DEBUG NB SPHINX
+import nbsphinx
+
+def fake_parse(self, inputstring, document):
+    print('inputstring for', document.settings.env.docname)
+    print(inputstring)
+
+nbsphinx.NotebookParser.parse = fake_parse
+## END DEBUG NB SPHINX
+
 import sys
 import os
 import shlex
