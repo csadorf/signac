@@ -13,13 +13,13 @@
 # serve to show the default.
 
 ## BEGIN DEBUG NB SPHINX
-import nbsphinx
-
-def fake_parse(self, inputstring, document):
-    print('inputstring for', document.settings.env.docname)
-    print(inputstring)
-
-nbsphinx.NotebookParser.parse = fake_parse
+# import nbsphinx
+# 
+# def fake_parse(self, inputstring, document):
+#     print('inputstring for', document.settings.env.docname)
+#     print(inputstring)
+# 
+# nbsphinx.NotebookParser.parse = fake_parse
 ## END DEBUG NB SPHINX
 
 import sys
