@@ -1,4 +1,4 @@
-cat <<'EOF' >> ~/.pypirc
+cat << EOF >> ~/.pypirc
 [distutils]
 index-servers=
     pypi
