@@ -9,6 +9,7 @@ pipelines:
     - step:
         name: 'build and test'
         script:
+          - bash show-config.bash
           - python --version
           - pip --version
           - pip install -U flake8
