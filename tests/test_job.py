@@ -4,6 +4,7 @@
 from __future__ import absolute_import
 import unittest
 import os
+import stat
 import io
 import warnings
 import logging
@@ -446,6 +447,20 @@ class JobOpenAndClosingTest(BaseJobTest):
             logging.disable(logging.NOTSET)
         job2.init(force=True)
         job2.init()
+
+    def test_permission_error(self):
+        import stat
+
+        job = self.open_job(test_token)
+        job.init()
+        fn_manifest = os.path.join(job.workspace(), job.FN_MANIFEST)
+        print(stat.S_IMODE(os.lstat(fn_manifest).st_mode))
+        os.chmod(   # remove write permissions
+            fn_manifest,
+            stat.S_IMODE(os.lstat(fn_manifest).st_mode) &
+            (~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH))
+        print(stat.S_IMODE(os.lstat(fn_manifest).st_mode))
+        job2 = self.open_job(test_token)
 
 
 class JobDocumentTest(BaseJobTest):
