@@ -237,6 +237,18 @@ class H5Store(MutableMapping):
         self._filename = os.path.realpath(filename)
         self._file = None
 
+    @property
+    def file(self):
+        """Return a reference to the underlying file-object.
+
+        :raises OSError:
+            In case that the file is not open.
+        """
+        if self._file is None:
+            raise OSError("File '{}' is not open!".format(self))
+        else:
+            return self._file
+
     def __repr__(self):
         return "<{}(filename={})>".format(type(self).__name__, os.path.relpath(self._filename))
 
