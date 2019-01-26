@@ -58,6 +58,7 @@ logger = logging.getLogger(__name__)
 def _h5set(file, grp, key, value, path=None):
     """Set a key in an h5py container, recursively converting Mappings to h5py
     groups and transparently handling None."""
+    import h5py
     import numpy    # h5py depends on numpy, so this is safe.
     path = path + '/' + key if path else key
 
@@ -82,6 +83,14 @@ def _h5set(file, grp, key, value, path=None):
     # NumPy types
     elif type(value).__module__ == numpy.__name__:
         grp[key] = value
+
+    elif isinstance(value, h5py._hl.dataset.Dataset):
+        try:
+            grp[key] = value
+        except RuntimeError as error:
+            if 'Unable to create link (interfile hard links are not allowed)' != str(error):
+                raise
+            grp[key] = value[()]
 
     # Other types
     else:
